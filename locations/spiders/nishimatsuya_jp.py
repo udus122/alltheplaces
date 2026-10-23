@@ -10,6 +10,7 @@ from locations.items import Feature
 
 TIME_RANGE = re.compile(r"(AM|PM)?\s*(\d{1,2}:\d{2})\s*[〜~-]\s*(AM|PM)?\s*(\d{1,2}:\d{2})")
 CLOSING_TIME = re.compile(r"(AM|PM)?\s*(\d{1,2}:\d{2})まで")
+OPENING_TIME = re.compile(r"(AM|PM)?\s*(\d{1,2}:\d{2})\s*[〜~-]$")
 
 
 def to_24h(ampm: str | None, hhmm: str) -> str:
@@ -24,7 +25,7 @@ def to_24h(ampm: str | None, hhmm: str) -> str:
 def parse_days(text: str) -> list[str] | None:
     """Return the weekdays named in text, [] if it names none, or None if it contains anything else (e.g. a date)."""
     # Public holidays and the days before them cannot be expressed per weekday, so they are ignored
-    text = re.sub(r"祝(?:祭)?日の前日|祝前日|祝(?:祭)?日|祝|曜日|曜|[はと・\s]", "", text)
+    text = re.sub(r"祝(?:祭)?日の前日|祝前日|祝(?:祭)?日|祝|曜日|曜|のみ|[はと・\s]", "", text)
     days = []
     for name, named_days in (("毎日", DAYS), ("平日", DAYS[:5])):
         if name in text:
@@ -41,17 +42,25 @@ def parse_days(text: str) -> list[str] | None:
 def parse_opening_hours(text: str) -> OpeningHours | None:
     """Parse e.g. "AM10:00〜PM8:00（金土日祝はPM9:00まで営業しております）"; return None if any part is not understood."""
     day_hours = {}
-    for part in (p.strip() for p in re.split(r"[()、。]", unicodedata.normalize("NFKC", text))):
+    # "‾" (overline) is used as a range separator on some pages
+    text = unicodedata.normalize("NFKC", text.replace("‾", "〜"))
+    for part in (p.strip() for p in re.split(r"[()、。]", text)):
         if not part:
             continue
-        if times := TIME_RANGE.search(part):
-            days = parse_days(part[: times.start()])
-            if days == [] and not day_hours:
-                days = DAYS  # the first time range without days applies to every day
-            if not days or re.search(r"\d", part[times.end() :]):
+        if ranges := list(TIME_RANGE.finditer(part)):
+            # A part may hold several ranges, e.g. "月〜土AM9:30〜PM8:00 日AM9:00〜PM8:00"
+            start = 0
+            for times in ranges:
+                days = parse_days(part[start : times.start()])
+                if days == [] and not day_hours:
+                    days = DAYS  # the first time range without days applies to every day
+                if not days:
+                    return None
+                open_ampm, open_time, close_ampm, close_time = times.groups()
+                day_hours.update(dict.fromkeys(days, [to_24h(open_ampm, open_time), to_24h(close_ampm, close_time)]))
+                start = times.end()
+            if re.search(r"\d", part[start:]):
                 return None
-            open_ampm, open_time, close_ampm, close_time = times.groups()
-            day_hours.update(dict.fromkeys(days, [to_24h(open_ampm, open_time), to_24h(close_ampm, close_time)]))
         elif (
             (closing := CLOSING_TIME.search(part))
             and (days := parse_days(part[: closing.start()]))
@@ -61,6 +70,12 @@ def parse_opening_hours(text: str) -> OpeningHours | None:
                 if day not in day_hours:
                     return None
                 day_hours[day] = [day_hours[day][0], to_24h(*closing.groups())]
+        elif (opening := OPENING_TIME.search(part)) and (days := parse_days(part[: opening.start()])):
+            # e.g. "日曜はAM9:30〜" changes only the opening time
+            for day in days:
+                if day not in day_hours:
+                    return None
+                day_hours[day] = [to_24h(*opening.groups()), day_hours[day][1]]
         else:
             return None
     if not day_hours:
