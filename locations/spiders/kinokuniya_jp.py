@@ -35,6 +35,10 @@ class KinokuniyaJPSpider(SitemapSpider, StructuredDataSpider):
     def post_process_item(
         self, item: Feature, response: TextResponse, ld_data: dict, **kwargs: Any
     ) -> Iterable[Feature]:
+        # Closed stores keep their page, with the status "9月30日をもって閉店いたしました" in place of today's hours
+        if "閉店" in response.xpath('string(//div[@class="openDate"]/p[contains(@class, "status")])').get(""):
+            return
+
         name = item.pop("name")
         if name.startswith("旭屋書店"):
             item.update(ASAHIYA)
