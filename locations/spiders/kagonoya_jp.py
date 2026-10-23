@@ -45,9 +45,6 @@ class KagonoyaJPSpider(Spider):
             item["phone"] = phone.group()
         item["website"] = response.url
 
-        if coords := re.search(r"maps\.google\.com/maps\?[^\"']*q=([-\d.]+),([-\d.]+)", response.text):
-            item["lat"], item["lon"] = coords.groups()
-
         item["opening_hours"] = OpeningHours()
         for day_hours in response.xpath('//div[@class="open_item"]'):
             if not (day := DAYS_JP.get(day_hours.xpath('normalize-space(div[@class="open_week"])').get().rstrip("："))):
