@@ -8,7 +8,7 @@ from locations.categories import Categories, apply_category
 from locations.items import Feature
 from locations.structured_data_spider import StructuredDataSpider
 
-ASAHIYA = {"brand": "旭屋書店", "brand_wikidata": "Q11511670"}
+ASAHIYA = {"brand": "旭屋書店", "brand_wikidata": "Q11511670", "name": "旭屋書店"}
 
 
 class KinokuniyaJPSpider(SitemapSpider, StructuredDataSpider):
