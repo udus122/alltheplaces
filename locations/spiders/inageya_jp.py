@@ -21,7 +21,8 @@ class InageyaJPSpider(Spider):
             yield response.follow(url, callback=self.parse_store)
 
     def parse_store(self, response: Response) -> Any:
-        store = response.xpath("//comment[@store_name]")
+        if not (store := response.xpath("//comment[@store_name]")):
+            return
         item = Feature()
         item["ref"] = store.xpath("@local_store_code").get()
         branch = store.xpath("@store_name").get().removeprefix("いなげや")
