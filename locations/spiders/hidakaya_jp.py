@@ -4,7 +4,7 @@ from typing import Any
 from scrapy import Spider
 from scrapy.http import Response
 
-from locations.hours import DAYS_JP, OpeningHours
+from locations.hours import DAYS, DAYS_JP, OpeningHours
 from locations.items import Feature
 
 
@@ -25,8 +25,8 @@ class HidakayaJPSpider(Spider):
             response.xpath('normalize-space(//nav[@class="breadcrumb"]//li[last()])').get().removeprefix("日高屋 ")
         )
         address = response.xpath('normalize-space(//th[text()="所在地"]/following-sibling::td[1])').get("")
-        if postcode := re.match(r"〒\s*(\d{3}-\d{4})\s*", address):
-            item["postcode"] = postcode.group(1)
+        if postcode := re.match(r"〒\s*(\d{3})-?(\d{4})\s*", address):
+            item["postcode"] = "-".join(postcode.groups())
             address = address[postcode.end() :]
         item["addr_full"] = address
         item["phone"] = response.xpath('normalize-space(//td[@class="tel"])').get()
@@ -39,9 +39,16 @@ class HidakayaJPSpider(Spider):
 
         item["opening_hours"] = OpeningHours()
         for row in response.xpath('//th[text()="営業時間"]/ancestor::table[1]//td/text()').getall():
-            if hours := re.search(r"(\S+曜日)\s+(\d{1,2}:\d{2})-翌?(\d{1,2}:\d{2})", row.replace("\xa0", " ")):
-                day, open_time, close_time = hours.groups()
-                if day in DAYS_JP:
-                    item["opening_hours"].add_range(DAYS_JP[day], open_time, close_time)
+            if hours := re.search(r"(\S+曜日)\s+(\d{1,2}:\d{2})-(翌)?(\d{1,2}:\d{2})", row.replace("\xa0", " ")):
+                day, open_time, next_day, close_time = hours.groups()
+                if (day := DAYS_JP.get(day)) is None:
+                    continue
+                if next_day:
+                    # Split "00:00-翌00:30" here, as add_range reads it as a 30 minute opening
+                    item["opening_hours"].add_range(day, open_time, "24:00")
+                    if close_time != "00:00":
+                        item["opening_hours"].add_range(DAYS[(DAYS.index(day) + 1) % 7], "00:00", close_time)
+                else:
+                    item["opening_hours"].add_range(day, open_time, close_time)
 
         yield item
