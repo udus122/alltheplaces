@@ -6,7 +6,7 @@ from scrapy import Spider
 from scrapy.http import Response
 
 from locations.categories import Categories, apply_category
-from locations.hours import DAYS, OpeningHours
+from locations.hours import DAYS, DAYS_JP, OpeningHours
 from locations.items import Feature
 
 
@@ -35,10 +35,16 @@ class ShichirinboJPSpider(Spider):
         item["phone"] = phone
         item["website"] = response.url
 
-        hours = response.xpath('string(//td[contains(text(), "　営業時間")]/following-sibling::td[1])').get("")
-        if times := re.search(r"(\d{1,2}:\d{2})\s*〜\s*(?:深夜|翌)?(\d{1,2}:\d{2})", hours):
+        # The first line applies to every day, later lines such as "金・土 午前11:00〜24:00" override days
+        day_hours = {}
+        for line in response.xpath('//td[contains(text(), "　営業時間")]/following-sibling::td[1]/text()').getall():
+            if times := re.search(r"(\d{1,2}:\d{2})\s*[〜～~-]\s*(?:深夜|翌)?(\d{1,2}:\d{2})", line):
+                days = [DAYS_JP[char] for char in line[: times.start()] if char in "月火水木金土日"] or DAYS
+                day_hours.update(dict.fromkeys(days, times.groups()))
+        if day_hours:
             item["opening_hours"] = OpeningHours()
-            item["opening_hours"].add_days_range(DAYS, *times.groups())
+            for day, (open_time, close_time) in day_hours.items():
+                item["opening_hours"].add_range(day, open_time, close_time)
 
         apply_category(Categories.RESTAURANT, item)
         item["extras"]["cuisine"] = "yakiniku"
