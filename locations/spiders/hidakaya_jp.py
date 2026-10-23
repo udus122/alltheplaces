@@ -32,11 +32,9 @@ class HidakayaJPSpider(Spider):
         item["phone"] = response.xpath('normalize-space(//td[@class="tel"])').get()
         item["website"] = response.url
 
-        # Stores without a map pin have "var gIdo = 0;" and "var gKeido = 0;"
-        lat = re.search(r"var gIdo = ([-\d.]+);", response.text)
-        lon = re.search(r"var gKeido = ([-\d.]+);", response.text)
-        if lat and lon and float(lat.group(1)) and float(lon.group(1)):
+        if lat := re.search(r"var gIdo = ([-\d.]+);", response.text):
             item["lat"] = lat.group(1)
+        if lon := re.search(r"var gKeido = ([-\d.]+);", response.text):
             item["lon"] = lon.group(1)
 
         item["opening_hours"] = OpeningHours()
