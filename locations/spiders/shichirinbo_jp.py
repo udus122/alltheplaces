@@ -39,7 +39,9 @@ class ShichirinboJPSpider(Spider):
         day_hours = {}
         for line in response.xpath('//td[contains(text(), "　営業時間")]/following-sibling::td[1]/text()').getall():
             if times := re.search(r"(\d{1,2}:\d{2})\s*[〜～~-]\s*(?:深夜|翌)?(\d{1,2}:\d{2})", line):
-                days = [DAYS_JP[char] for char in line[: times.start()] if char in "月火水木金土日"] or DAYS
+                # Public holidays and the days before them cannot be expressed per weekday
+                prefix = re.sub(r"祝(?:祭)?日の前日|祝前日|祝(?:祭)?日|祝", "", line[: times.start()])
+                days = [DAYS_JP[char] for char in prefix if char in "月火水木金土日"] or DAYS
                 day_hours.update(dict.fromkeys(days, times.groups()))
         if day_hours:
             item["opening_hours"] = OpeningHours()
