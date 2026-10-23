@@ -50,13 +50,15 @@ class KagonoyaJPSpider(Spider):
 
         item["opening_hours"] = OpeningHours()
         for day_hours in response.xpath('//div[@class="open_item"]'):
-            day = DAYS_JP.get(day_hours.xpath('normalize-space(div[@class="open_week"])').get().rstrip("："))
-            for open_time, close_time in re.findall(
-                r"(\d{1,2}:\d{2})\s*〜\s*(\d{1,2}:\d{2})", day_hours.xpath('string(div[@class="open_hours"])').get()
-            ):
-                if day:
-                    item["opening_hours"].add_range(day, open_time, close_time)
+            if not (day := DAYS_JP.get(day_hours.xpath('normalize-space(div[@class="open_week"])').get().rstrip("："))):
+                continue
+            hours = day_hours.xpath('string(div[@class="open_hours"])').get()
+            if "定休" in hours or "休業" in hours:
+                item["opening_hours"].set_closed(day)
+            for open_time, close_time in re.findall(r"(\d{1,2}:\d{2})\s*[〜～~-]\s*(\d{1,2}:\d{2})", hours):
+                item["opening_hours"].add_range(day, open_time, close_time)
 
+        # NSI lists this brand by region only, so its tags are not applied by the NSI pipeline
         apply_category(Categories.RESTAURANT, item)
         item["extras"]["cuisine"] = "japanese"
 
