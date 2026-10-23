@@ -35,11 +35,13 @@ class KinokuniyaJPSpider(SitemapSpider, StructuredDataSpider):
     def post_process_item(
         self, item: Feature, response: TextResponse, ld_data: dict, **kwargs: Any
     ) -> Iterable[Feature]:
-        # Closed stores keep their page, with the status "9月30日をもって閉店いたしました" in place of today's hours
-        if "閉店" in response.xpath('string(//div[@class="openDate"]/p[contains(@class, "status")])').get(""):
+        # Closed stores keep their page, with the status "9月30日をもって閉店いたしました" in place of today's hours.
+        # A notice of a future closure ("閉店いたします") is kept.
+        status = response.xpath('string(//div[@class="openDate"]/p[contains(@class, "status")])').get("")
+        if re.search(r"閉店(?:いた)?しました", status):
             return
 
-        name = item.pop("name")
+        name = item.pop("name", None) or ""
         if name.startswith("旭屋書店"):
             item.update(ASAHIYA)
             apply_category(Categories.SHOP_BOOKS, item)
@@ -49,15 +51,15 @@ class KinokuniyaJPSpider(SitemapSpider, StructuredDataSpider):
         elif name.startswith("紀伊國屋"):
             # 紀伊國屋ホール and 紀伊國屋サザンシアター are theatres
             return
-        else:
+        elif name:
             item["branch"] = name
 
-        address = ld_data.get("address", {})
-        item["addr_full"] = "".join(
-            address.get(key, "") for key in ("addressRegion", "addressLocality", "streetAddress")
-        )
+        address = ld_data.get("address") or {}
+        locality, street = address.get("addressLocality") or "", address.get("streetAddress") or ""
+        if addr_full := "".join((address.get("addressRegion") or "", locality, street)):
+            item["addr_full"] = addr_full
         # Some stores put the town and block number in addressLocality
-        if re.search(r"\d", address.get("addressLocality", "")) or re.match(r"\d", address.get("streetAddress", "")):
+        if re.search(r"\d", locality) or re.match(r"\d", street):
             item.pop("city", None)
             item.pop("street_address", None)
         yield item
