@@ -8,6 +8,15 @@ from locations.hours import DAYS, OpeningHours
 from locations.items import Feature
 
 
+def to_24h(ampm: str | None, hhmm: str) -> str:
+    hour, minute = map(int, hhmm.split(":"))
+    if ampm == "PM" and hour < 12:
+        hour += 12
+    elif ampm == "AM" and hour == 12:
+        hour = 0
+    return f"{hour:02d}:{minute:02d}"
+
+
 class NishimatsuyaJPSpider(SitemapSpider):
     name = "nishimatsuya_jp"
     item_attributes = {"brand": "西松屋", "brand_wikidata": "Q11628761"}
@@ -33,11 +42,6 @@ class NishimatsuyaJPSpider(SitemapSpider):
         if times := re.fullmatch(r"(AM|PM)?(\d{1,2}:\d{2})\s*[〜～~-]\s*(AM|PM)?(\d{1,2}:\d{2})", hours):
             open_ampm, open_time, close_ampm, close_time = times.groups()
             item["opening_hours"] = OpeningHours()
-            if open_ampm and close_ampm:
-                item["opening_hours"].add_days_range(
-                    DAYS, open_ampm + open_time, close_ampm + close_time, time_format="%p%I:%M"
-                )
-            else:
-                item["opening_hours"].add_days_range(DAYS, open_time, close_time)
+            item["opening_hours"].add_days_range(DAYS, to_24h(open_ampm, open_time), to_24h(close_ampm, close_time))
 
         yield item
